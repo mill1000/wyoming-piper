@@ -315,16 +315,14 @@ class OmniVoiceModel:
         )
 
         if openvino_device:
-            # The OpenVINO EP is a plugin (onnxruntime-ep-openvino), not built
-            # into onnxruntime. Register its library, then attach the selected
-            # device via add_provider_for_devices: plugin EPs cannot be
-            # requested through the providers= list, and without registration
-            # the session would silently fall back to CPU.
             import onnxruntime_ep_openvino as ov_ep
 
+            # Register OpenVINO execution provider
             ort.register_execution_provider_library(
                 "openvino_ep", ov_ep.get_library_path()
             )
+
+            # Find all OpenVINO devices
             ep_name = ov_ep.get_ep_name()
             ep_devices = [d for d in ort.get_ep_devices() if d.ep_name == ep_name]
             ov_devices = [
@@ -332,6 +330,8 @@ class OmniVoiceModel:
                 for d in ep_devices
                 if d.ep_metadata.get("ov_device") == openvino_device
             ]
+
+            # Fail if no devices found
             if not ov_devices:
                 available = sorted(
                     {str(d.ep_metadata.get("ov_device")) for d in ep_devices}
@@ -341,6 +341,7 @@ class OmniVoiceModel:
                     f"(available: {', '.join(available) or 'none'})"
                 )
 
+            # Set up inference session with OpenVINO devices
             sess_options.add_provider_for_devices(ov_devices, {})
             session = ort.InferenceSession(onnx_path, sess_options)
             label = f"OpenVINO ({openvino_device})"
