@@ -148,7 +148,7 @@ async def main() -> None:
         default=None,
         help="Run the omnivoice backend on the OpenVINO Execution Provider with "
         "the given device (CPU, GPU, or NPU; default: GPU; "
-        "requires onnxruntime-openvino)",
+        "requires onnxruntime-ep-openvino)",
     )
     #
     # Web UI for managing custom voices (runs alongside the Wyoming server)

@@ -285,7 +285,7 @@ class OmniVoiceModel:
         default_language: str = "English",
         local_files_only: bool = False,
         use_cuda: bool = False,
-        openvino_device: str | None = None
+        openvino_device: str | None = None,
     ) -> None:
         import types
 
@@ -309,21 +309,50 @@ class OmniVoiceModel:
         )
         model.eval()
 
-        if openvino_device:
-            providers = [
-                ("OpenVINOExecutionProvider", {"device_type": openvino_device}),
-                "CPUExecutionProvider",
-            ]
-        elif use_cuda:
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        else:
-            providers = ["CPUExecutionProvider"]
-        _LOGGER.debug("Loading ONNX LM graph with %s: %s", providers[0], onnx_path)
         sess_options = ort.SessionOptions()
         sess_options.graph_optimization_level = (
             ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         )
-        session = ort.InferenceSession(onnx_path, sess_options, providers=providers)
+
+        if openvino_device:
+            # The OpenVINO EP is a plugin (onnxruntime-ep-openvino), not built
+            # into onnxruntime. Register its library, then attach the selected
+            # device via add_provider_for_devices: plugin EPs cannot be
+            # requested through the providers= list, and without registration
+            # the session would silently fall back to CPU.
+            import onnxruntime_ep_openvino as ov_ep
+
+            ort.register_execution_provider_library(
+                "openvino_ep", ov_ep.get_library_path()
+            )
+            ep_name = ov_ep.get_ep_name()
+            ep_devices = [d for d in ort.get_ep_devices() if d.ep_name == ep_name]
+            ov_devices = [
+                d
+                for d in ep_devices
+                if d.ep_metadata.get("ov_device") == openvino_device
+            ]
+            if not ov_devices:
+                available = sorted(
+                    {str(d.ep_metadata.get("ov_device")) for d in ep_devices}
+                )
+                raise RuntimeError(
+                    f"OpenVINO device '{openvino_device}' not available "
+                    f"(available: {', '.join(available) or 'none'})"
+                )
+
+            sess_options.add_provider_for_devices(ov_devices, {})
+            session = ort.InferenceSession(onnx_path, sess_options)
+            label = f"OpenVINO ({openvino_device})"
+        else:
+            providers = (
+                ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                if use_cuda
+                else ["CPUExecutionProvider"]
+            )
+            session = ort.InferenceSession(onnx_path, sess_options, providers=providers)
+            label = providers[0]
+        _LOGGER.debug("Loading ONNX LM graph with %s: %s", label, onnx_path)
         input_names = {i.name for i in session.get_inputs()}
 
         def onnx_forward(

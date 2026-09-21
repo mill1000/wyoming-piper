@@ -117,10 +117,11 @@ omnivoice-deps = [
     "wyoming-piper[omnivoice-core]",
     "onnxruntime",
 ]
-# OpenVINO OmniVoice backend: the shared deps plus onnxruntime-openvino.
+# OpenVINO OmniVoice backend: the shared deps plus onnxruntime and openvino EP
 omnivoice-openvino-deps = [
     "wyoming-piper[omnivoice-core]",
-    "onnxruntime-openvino",
+    "onnxruntime>=1.23.0",
+    "onnxruntime-ep-openvino",
 ]
 # Self-contained, and ~600 MB heavier, since resolving the omnivoice package
 # pulls its full dependency set. Prefer omnivoice-deps plus --no-deps omnivoice.
